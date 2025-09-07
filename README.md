@@ -1,4 +1,4 @@
-# MWONGOZO WA SILATRIX MD
+# MWONGOZO WA BEEZILA MD
 
 ## Vipengele Vikuu
 
