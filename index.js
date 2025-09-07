@@ -1,19 +1,97 @@
-// Hii ni faili kuu ya SILATRIX MD WhatsApp Bot
+// Auto-fixed index.js for Katabump: installs missing deps and uses legacy-peer-deps automatically
+// Hii ni faili yako kuu ya SILATRIX MD WhatsApp Bot
+
+// --- Bootstrap: ensure npm installs and .npmrc for legacy-peer-deps ---
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+function log(...a){ console.log('[setup]', ...a) }
+
+// Ensure .npmrc contains legacy-peer-deps=true so Katabump's install respects it
+try {
+  const npmrcPath = path.join(process.cwd(), '.npmrc');
+  if (!fs.existsSync(npmrcPath)) {
+    log('.npmrc not found — creating with legacy-peer-deps=true');
+    fs.writeFileSync(npmrcPath, 'legacy-peer-deps=true\n', { encoding: 'utf8' });
+  } else {
+    const cur = fs.readFileSync(npmrcPath, 'utf8');
+    if (!/legacy-peer-deps\s*=\s*true/.test(cur)) {
+      log('Adding legacy-peer-deps=true to .npmrc');
+      fs.appendFileSync(npmrcPath, '\nlegacy-peer-deps=true\n', { encoding: 'utf8' });
+    }
+  }
+} catch (err) {
+  console.error('Failed to write .npmrc:', err);
+}
+
+// Helper: run npm install (legacy peer deps) if node_modules missing or if explicit package missing
+function runNpmInstall(args = []) {
+  try {
+    const cmd = ['npm', 'install', '--no-audit', '--no-fund', '--legacy-peer-deps'].concat(args).join(' ');
+    log('Running:', cmd);
+    execSync(cmd, { stdio: 'inherit', env: Object.assign({}, process.env) });
+    return true;
+  } catch (e) {
+    console.error('npm install failed:', e.message || e);
+    return false;
+  }
+}
+
+// If node_modules missing (fresh deploy), install once
+if (!fs.existsSync(path.join(process.cwd(), 'node_modules'))) {
+  log('node_modules not found — running npm install (legacy peer deps)...');
+  runNpmInstall();
+}
+
+// Utility: ensure a package can be required; if not, install it then try again.
+function ensurePackage(pkgName, installName = null) {
+  installName = installName || pkgName;
+  try {
+    return require(pkgName);
+  } catch (err) {
+    log(`${pkgName} not found — installing ${installName}...`);
+    const ok = runNpmInstall([installName]);
+    if (!ok) {
+      console.error(`Failed to install ${installName}`);
+      return null;
+    }
+    // try to clear require cache for the package path and require again
+    try {
+      // give Node a tiny grace: remove package from require cache if present
+      Object.keys(require.cache).forEach(k => {
+        if (k.includes(path.join('node_modules', pkgName))) delete require.cache[k];
+      });
+      return require(pkgName);
+    } catch (err2) {
+      console.error(`Still cannot require ${pkgName} after install:`, err2);
+      return null;
+    }
+  }
+}
+
+// --- End bootstrap ---
+
+// Sasa yaliyomo ya faili kwa Kiswahili
 require('./settings')
 
-// Vipodozi vya mfumo
-const chalk = require('chalk')
-const { Boom } = require('@hapi/boom')
-const FileType = require('file-type')
-const pathModule = require('path')
-const axios = require('axios')
+// Kwa Boom, hakikisha imesakinishwa kwa sababu mfumo wako ulilalamika
+const BoomPkg = ensurePackage('@hapi/boom') || {};
+const { Boom } = BoomPkg.Boom ? BoomPkg : { Boom: BoomPkg.Boom || BoomPkg };
 
-const { shughuliZaUjumbe, shughuliZaMabadilikoYaKikundi, shughuliZaStatus, vipengele, wekaVipengele } = require('./main');
-const PhoneNumber = require('awesome-phonenumber')
+// Vipodozi vya kawaida (vingine vya hivi vinapaswa kuwepo kwenye package.json)
+const chalk = ensurePackage('chalk') || require('chalk')
+const FileType = ensurePackage('file-type') || require('file-type')
+const pathModule = require('path')
+const axios = ensurePackage('axios') || require('axios')
+
+const { shughuliZaUjumbe, shughuliZaMabadilikoYaKikundi, shughuliZaStatus } = require('./main');
+const PhoneNumber = ensurePackage('awesome-phonenumber') || require('awesome-phonenumber')
 const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./lib/exif')
 const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, await: awaitFn, sleep, reSize } = require('./lib/myfunc')
 
-// Baileys - itumie kwa kufunga na kufungua
+// Baileys - jaribu kuhitaji; ikiwa haipo, sakinisha kisha hitaji tena
+const baileysPkg = ensurePackage('@whiskeysockets/baileys') || require('@whiskeysockets/baileys')
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -29,12 +107,12 @@ const {
     jidNormalizedUser,
     makeCacheableSignalKeyStore,
     delay
-} = require('@whiskeysockets/baileys')
+} = baileysPkg
 
-const NodeCache = require("node-cache")
-const pino = require("pino")
+const NodeCache = ensurePackage("node-cache") || require("node-cache")
+const pino = ensurePackage("pino") || require("pino")
 const readline = require("readline")
-const { parsePhoneNumber } = require("libphonenumber-js")
+const { parsePhoneNumber } = ensurePackage("libphonenumber-js") || require("libphonenumber-js")
 const { PHONENUMBER_MCC } = require('@whiskeysockets/baileys/lib/Utils/generics')
 const { rmSync, existsSync } = require('fs')
 const { join } = require('path')
@@ -77,7 +155,7 @@ const hifadhi = {
     }
 }
 
-let nambaYaSimu = "255789661031" // Namba ya simu ya msingi, inaweza kubadilishwa na mtumiaji
+let nambaYaSimu = "255789661031"
 let mmiliki = JSON.parse(fs.readFileSync('./data/mmiliki.json'))
 
 global.jinaLaBoti = "SILATRIX MD 👑"
